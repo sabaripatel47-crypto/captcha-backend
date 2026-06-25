@@ -65,8 +65,10 @@ public class CaptchaController {
             captchaCacheService.removeCaptcha(request.getCaptchaId());
             return ResultVO.fail("操作异常，请重试");
         }
-
-        if (Math.abs(targetX - offsetX) > 8) {
+        // 控制验证码校验的范围，不对称宽容度：偏右（多滑）宽容，偏左（少滑）严格
+        int diff = offsetX - targetX;
+        int tolerance = diff >= 0 ? 50 : 25;
+        if (Math.abs(diff) > tolerance) {
             return ResultVO.fail("验证失败，位置偏差过大");
         }
 
