@@ -1,5 +1,12 @@
 package com.captcha.captcha.dto;
 
+/**
+ * 登录请求的请求参数
+ *
+ * - username: 用户名
+ * - password: 密码
+ * - verifyToken：验证码验证通过后的token
+ */
 public class LoginRequest {
     private String username;
     private String password;

@@ -17,6 +17,7 @@ public class UserService {
 
     public User login(String username, String password) {
         User user = userMapper.findByUsername(username);
+        //将查找到的用户密码和输入密码进行比较
         if (user != null && user.getPassword().equals(password)) {
             return user;
         }

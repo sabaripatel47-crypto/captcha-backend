@@ -24,7 +24,7 @@ public class UserController {
 
     @Autowired
     private JwtUtil jwtUtil;
-
+    //登录接口
     @PostMapping("/login")
     public ResultVO<Map<String, String>> login(@RequestBody LoginRequest request) {
         if (request.getUsername() == null || request.getPassword() == null) {
@@ -39,21 +39,21 @@ public class UserController {
         if (username == null) {
             return ResultVO.fail("验证码已失效，请重新验证");
         }
-
+        // 调用登录逻辑查询对应的用户
         User user = userService.login(request.getUsername(), request.getPassword());
         if (user == null) {
             return ResultVO.fail("用户名或密码错误");
         }
-
+        // 创建对应的登录token
         String token = jwtUtil.generateToken(user.getUsername());
 
         Map<String, String> data = new HashMap<>();
-        data.put("token", token);
-        data.put("username", user.getUsername());
+        data.put("token", token);//设置token
+        data.put("username", user.getUsername());//设置用户名
 
         return ResultVO.ok(data);
     }
-
+    //获取用户信息
     @GetMapping("/info")
     public ResultVO<Map<String, Object>> getUserInfo(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
