@@ -10,16 +10,21 @@ public class CaptchaVO {
     private String captchaId;
     /** 验证码图片的 Base64 编码，格式为 "data:image/png;base64,xxxxx" */
     private String imageBase64;
+    /** 提示文本（已拼接好，如"拖动滑块直到出现车"），前端直接展示 */
+    private String tip;
 
     public CaptchaVO() {}
 
-    public CaptchaVO(String captchaId, String imageBase64) {
+    public CaptchaVO(String captchaId, String imageBase64, String tip) {
         this.captchaId = captchaId;
         this.imageBase64 = imageBase64;
+        this.tip = tip;
     }
 
     public String getCaptchaId() { return captchaId; }
     public void setCaptchaId(String captchaId) { this.captchaId = captchaId; }
     public String getImageBase64() { return imageBase64; }
     public void setImageBase64(String imageBase64) { this.imageBase64 = imageBase64; }
+    public String getTip() { return tip; }
+    public void setTip(String tip) { this.tip = tip; }
 }

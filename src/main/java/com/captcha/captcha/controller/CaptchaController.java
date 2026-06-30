@@ -50,8 +50,8 @@ public class CaptchaController {
 
             // 将图片转为 base64 字符串，前端使用canvas的drawImage来绘制
             String imageBase64 = captchaImageService.imageToBase64(result.image);
-            // 新建一个验证码实例对象(base64编码添加data前缀)
-            CaptchaVO vo = new CaptchaVO(captchaId, "data:image/png;base64," + imageBase64);
+            // 新建一个验证码实例对象(base64编码添加data前缀),tip 字段是后端已拼接好的提示文本(如"拖动滑块直到出现车")
+            CaptchaVO vo = new CaptchaVO(captchaId, "data:image/png;base64," + imageBase64, result.tip);
             return ResultVO.ok(vo);
         } catch (Exception e) {
             e.printStackTrace();//将报错信息打印到控制台

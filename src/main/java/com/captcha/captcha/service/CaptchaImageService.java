@@ -37,7 +37,7 @@ public class CaptchaImageService {
 
     /** 图标文件名列表，从 static/img/icon/ 目录加载 */
     private static final String[] ICON_NAMES = {
-            "icon-1-car.png", "icon-2-cat.png"
+            "icon-1-车.png", "icon-2-猫.png"
     };
     /** 背景图片文件名列表，从 static/img/bg/ 目录加载 */
     private static final String[] BG_NAMES = {
@@ -50,14 +50,17 @@ public class CaptchaImageService {
      * 生成验证码的返回值封装类
      * - image：包含目标图案的完整画布图片（BufferedImage）
      * - targetX：目标图案左上角的 X 坐标，用于前端遮罩定位和后端校验
+     * - tip：提示文本（已拼接好，如"拖动滑块直到出现车"），前端直接展示
      */
     public static class CaptchaResult {
         public BufferedImage image;
         public int targetX;
+        public String tip;
 
-        public CaptchaResult(BufferedImage image, int targetX) {
+        public CaptchaResult(BufferedImage image, int targetX, String tip) {
             this.image = image;
             this.targetX = targetX;
+            this.tip = tip;
         }
     }
 
@@ -86,8 +89,10 @@ public class CaptchaImageService {
         // 将背景图画到 combined 上（作为最底层）
         g.drawImage(background, 0, 0, WIDTH, HEIGHT, null);
 
-        // 步骤 2：加载本地图标图片并绘制
-        String iconName = ICON_NAMES[random.nextInt(ICON_NAMES.length)];
+        // 步骤 2：加载本地图标图片并绘制，同时从文件名提取中文生成提示文本
+        // 例如 "icon-1-车.png" -> 提取出 "车"，再拼成 "拖动滑块直到出现车"
+        int iconIndex = random.nextInt(ICON_NAMES.length);
+        String iconName = ICON_NAMES[iconIndex];
         BufferedImage iconImage = loadIcon(iconName);
         if (iconImage != null) {
             g.drawImage(iconImage, targetX, targetY, TARGET_SIZE, TARGET_SIZE, null);
@@ -100,7 +105,11 @@ public class CaptchaImageService {
 
         g.dispose();
 
-        return new CaptchaResult(combined, targetX);
+        // 从文件名中提取中文作为图标名（去掉 "icon-x-" 前缀和 ".png" 后缀）
+        // 例如 "icon-1-车.png" -> "车"
+        String iconLabel = iconName.replaceAll("^icon-\\d+-", "").replaceAll("\\.png$", "");
+        String tip = "拖动滑块直到出现" + iconLabel;
+        return new CaptchaResult(combined, targetX, tip);
     }
 
     /**
