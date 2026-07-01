@@ -94,11 +94,16 @@ public class CaptchaController {
             return ResultVO.fail("操作异常，请重试");
         }
 
-        // 位置容差校验：diff >= 0（右边）容忍 60px，diff < 0（左边）容忍 10px
+        // 位置容差校验：diff >= 0（右边）容忍 60px，diff < 0（左边）容忍 0px
         int diff = offsetX - targetX;
-        int tolerance = diff >= 0 ? 60 : 10;
+        int tolerance = diff >= 0 ? 60 : 0;
+        // System.out.println("tolerance: " + tolerance);
+        // System.out.println("diff: " + diff);
+        // System.out.println("targetX: " + targetX);
+        // System.out.println("offsetX: " + offsetX);
+        //差值大于容忍度,提示校验失败
         if (Math.abs(diff) > tolerance) {
-            return ResultVO.fail("验证失败，位置偏差过大");
+            return ResultVO.fail("验证码校验失败");
         }
 
         // 验证成功后删除 Redis 中的验证码数据（一次性使用）
