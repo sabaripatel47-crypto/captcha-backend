@@ -9,7 +9,11 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Random;
+import java.util.Base64;
+import java.util.List;
 
 /**
  * 负责验证码图片的生成与编码
@@ -28,16 +32,19 @@ public class CaptchaImageService {
     private static final int WIDTH = 320;
     /** 画布高度（像素），须与前端 canvasHeight 保持一致 */
     private static final int HEIGHT = 180;
-    /** 目标图案 X 坐标随机范围最小值（防止太靠左边缘） */
-    private static final int TARGET_X_MIN = 80;
-    /** 目标图案 X 坐标随机范围最大值（防止太靠右边缘） */
-    private static final int TARGET_X_MAX = 260;
+    /** X 坐标随机范围最小值（防止太靠左边缘） */
+    private static final int X_MIN = 80;
+    /** X 坐标随机范围最大值（防止太靠右边缘，留出 50px 给车体本身） */
+    private static final int X_MAX = 230;
     /** 目标图案尺寸（正方形区域边长） */
     private static final int TARGET_SIZE = 50;
 
-    /** 图标文件名列表，从 static/img/icon/ 目录加载 */
-    private static final String[] ICON_NAMES = {
-            "icon-1-车.png", "icon-2-猫.png"
+    /**
+     * icon 文件名列表，
+     * 每次生成时从中随机选一个作为"目标 icon"，其余作为混淆 icon 各画一个
+     */
+    private static final String[] ICON_POOL = {
+            "icon-1-车.png", "icon-2-猫.png", "icon-3-猪.png", "icon-4-老虎.png", "icon-5-马.png"
     };
     /** 背景图片文件名列表，从 static/img/bg/ 目录加载 */
     private static final String[] BG_NAMES = {
@@ -68,48 +75,94 @@ public class CaptchaImageService {
      * 生成一张完整的验证码图片
      *
      * 步骤：
-     * 1. 随机生成目标图标的 X、Y 坐标
-     * 2. 从本地加载背景图
-     * 3. 从本地加载图标图片并绘制到背景图上
+     * 1. 从全部 icon 池里随机选一个作为目标 icon
+     * 2. 在画布上随机生成 2~3 个目标 icon 位置（错开 y），targetX 取最右那个的 x
+     * 3. 加载背景图，把目标 icon 全部画上
+     * 4. 把剩余每种 icon 各画一个作为混淆（最多 4 个），位置随机且不与目标 icon 重叠
+     * 5. tip 文案按选中的目标 icon 动态拼接
      *
-     * @return CaptchaResult，包含最终图片和目标位置 targetX
+     * @return CaptchaResult，包含最终图片、目标位置 targetX（最右目标 icon 的 x）和提示文本
      */
     public CaptchaResult generateCaptcha() {
-        // 随机目标图标 X 坐标，范围 [80, 260]，避免太靠左/右边缘
-        int targetX = random.nextInt(TARGET_X_MAX - TARGET_X_MIN + 1) + TARGET_X_MIN;
-        // 随机目标图标 Y 坐标，范围 [TARGET_SIZE+10, HEIGHT-TARGET_SIZE-10]，保证图标完整显示
-        int targetY = random.nextInt(HEIGHT - TARGET_SIZE * 2 - 20) + TARGET_SIZE + 10;
+        // 步骤 1：从 icon 池中随机选一个作为本次的目标 icon
+        String targetIconName = ICON_POOL[random.nextInt(ICON_POOL.length)];
+        // 从文件名提取中文标签：例如 "icon-1-车.png" -> "车"
+        String targetLabel = targetIconName.replaceAll("^icon-\\d+-", "").replaceAll("\\.png$", "");
 
-        // 步骤 1：加载背景图
-        BufferedImage background = loadBackground();
-        // 创建透明通道画布，用于在背景图上叠加图标和辅助线
-        BufferedImage combined = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = combined.createGraphics();
-
-        // 将背景图画到 combined 上（作为最底层）
-        g.drawImage(background, 0, 0, WIDTH, HEIGHT, null);
-
-        // 步骤 2：加载本地图标图片并绘制，同时从文件名提取中文生成提示文本
-        // 例如 "icon-1-车.png" -> 提取出 "车"，再拼成 "拖动滑块直到出现车"
-        int iconIndex = random.nextInt(ICON_NAMES.length);
-        String iconName = ICON_NAMES[iconIndex];
-        BufferedImage iconImage = loadIcon(iconName);
-        if (iconImage != null) {
-            g.drawImage(iconImage, targetX, targetY, TARGET_SIZE, TARGET_SIZE, null);
+        // 步骤 2：随机生成 2~3 个目标 icon 位置(nextInt(2):[0,1])
+        int targetCount = 2 + random.nextInt(2); // [2, 3]
+        //目标位置数组
+        List<int[]> targetPositions = new ArrayList<>();
+        int targetAttempts = 0;//重试计数器(overlapsAny会拒绝掉很多随机位置,超过200次上限后,会退出循环)
+        // 没有放够目标icon数量,继续循环
+        while (targetPositions.size() < targetCount && targetAttempts++ < 200) {
+            int tx = random.nextInt(X_MAX - X_MIN + 1) + X_MIN;//取最小值和最大值之间的一个随机位置
+            //TARGET_SIZE+10为Y坐标最小值(10px为安全边距),上下流出TARGET_SIZE的安全距离
+            int ty = random.nextInt(HEIGHT - TARGET_SIZE * 2) + TARGET_SIZE + 10;
+            // 互相之间避免重叠
+            if (!overlapsAny(tx, ty, targetPositions)) {
+                targetPositions.add(new int[]{tx, ty});
+            }
         }
 
-        // 步骤 3：开启抗锯齿，提升图标边缘质量
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        // 设置辅助线颜色（白色半透明），帮助用户判断滑块应拖到的目标位置
-        g.setColor(new Color(255, 255, 255, 200));
+        // 步骤 3：加载背景图
+        BufferedImage background = loadBackground();
+        BufferedImage combined = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = combined.createGraphics();
+        g.drawImage(background, 0, 0, WIDTH, HEIGHT, null);//开始绘制
 
-        g.dispose();
+        // 步骤 4：绘制所有目标 icon
+        BufferedImage targetImage = loadIcon(targetIconName);
+        if (targetImage != null) {
+            //根据目标位置逐步绘画每一个目标图标
+            for (int[] pos : targetPositions) {
+                g.drawImage(targetImage, pos[0], pos[1], TARGET_SIZE, TARGET_SIZE, null);
+            }
+        }
 
-        // 从文件名中提取中文作为图标名（去掉 "icon-x-" 前缀和 ".png" 后缀）
-        // 例如 "icon-1-车.png" -> "车"
-        String iconLabel = iconName.replaceAll("^icon-\\d+-", "").replaceAll("\\.png$", "");
-        String tip = "拖动滑块直到出现" + iconLabel;
+        // 步骤 5：把 icon 池里除目标外的每个 icon 各画一个作为混淆
+        for (String name : ICON_POOL) {
+            //与目标图标名称相同,跳过
+            if (name.equals(targetIconName)) continue;
+            //加载混淆图标
+            BufferedImage dIcon = loadIcon(name);
+            if (dIcon == null) continue;
+
+            // 随机位置,最多重试 20 次避免与目标 icon 重叠
+            int attempts = 0;
+            while (attempts++ < 20) {
+                int dx = random.nextInt(WIDTH - TARGET_SIZE);
+                int dy = random.nextInt(HEIGHT - TARGET_SIZE);
+                // 如果没有重叠,添加这个图标
+                if (!overlapsAny(dx, dy, targetPositions)) {
+                    g.drawImage(dIcon, dx, dy, TARGET_SIZE, TARGET_SIZE, null);
+                    break;
+                }
+            }
+        }
+        // targetX目标坐标取最右边icon的坐标
+        int targetX = 0;
+        for (int[] pos : targetPositions) {
+            if (pos[0] > targetX) targetX = pos[0];
+        }
+        //拼接前端需要提示的文本
+        String tip = "拖动滑块直到出现所有" + targetLabel;
         return new CaptchaResult(combined, targetX, tip);
+    }
+
+    /**
+     * 判断给定坐标 (x, y) 处放置 TARGET_SIZE 的方块,是否与 givenPositions 中任一矩形重叠
+     * （留 4px 边距避免视觉粘连）
+     */
+    private boolean overlapsAny(int x, int y, List<int[]> givenPositions) {
+        int SIZE = TARGET_SIZE;
+        for (int[] pos : givenPositions) {
+            // 四个条件都成立才算有折叠(POS[0]:矩形的左上角x坐标,POS[1]:矩形的左上角y坐标),4px作为安全边距
+            boolean overlap = x < pos[0] + SIZE - 4 && x + SIZE - 4 > pos[0]
+                    && y < pos[1] + SIZE - 4 && y + SIZE - 4 > pos[1];
+            if (overlap) return true;
+        }
+        return false;
     }
 
     /**
