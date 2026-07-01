@@ -145,6 +145,8 @@ public class CaptchaImageService {
         for (int[] pos : targetPositions) {
             if (pos[0] > targetX) targetX = pos[0];
         }
+        //去除误差
+        targetX+=22;
         //拼接前端需要提示的文本
         String tip = "拖动滑块直到出现所有" + targetLabel;
         return new CaptchaResult(combined, targetX, tip);
